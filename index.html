@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+
+<!--Thi Hoai An, Le - 000798006
+    Description: This website creates a Google map for education institutions in Hamilton.
+
+    Thi Hoai An Le - 000798006 certify that this file is my own work, that I have not copied it from any other source.				
+    I also certify that I have not allowed my work to be copied by other.
+    
+    January 23, 2021
+-->
+
+<html>
+  <head>
+    <title>Lab 1 - Maps and Geolocation</title>
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=default"></script>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js"></script>
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDoH3oyYR5nzERWlIBQ4XLVZLtm63ZoIzc&callback=initMap&libraries=&v=weekly" defer></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.0/js/bootstrap.min.js"></script>
+    <script src="education.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta1/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-giJF6kkoqNQ00vy+HMDP7azOuL0xtbfIcaT9wjKHr8RbDVddVHyTfAAsrekwKmP1" crossorigin="anonymous">
+
+    <script>
+        var map;
+        var myMarker;
+        var myInfoWindow;
+        var markersArray = [];
+        var infowindowsArray= [];
+        var directionsService;
+        var directionsRenderer;
+        var geocoder;
+        var newInfowindowArray=[];
+        var newMarkerArray=[];
+        let count = 0;
+        const labels = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        let labelIndex = 0;
+        
+
+        /**
+         * Use the Geolocation API to detect user's locaton.
+         * Display all markers on the map user's location and for all the institution based on the education.js
+         * Get the value in form form that user fill in the address and name
+         */
+        function initMap() {
+            const centerLatLng = { lat: 43.2464343, lng: -79.8618984 };
+            map = new google.maps.Map(document.getElementById("map"), {
+                zoom: 13,
+                center: centerLatLng,
+                mapTypeControl: false,
+                fullscreenControl: false,
+            });
+            directionsService = new google.maps.DirectionsService();
+            directionsRenderer = new google.maps.DirectionsRenderer();
+            geocoder = new google.maps.Geocoder();
+            //Dectect user's location and appear the infoWindow about it
+            detectUserLocation();
+
+            //Set markers for all the institutions when opening the page.
+            setMarkers();
+
+            //Get the value in addressForm and use geocoder to add the new marker    
+            document.forms.addressForm.addEventListener("submit",function(event){
+                event.preventDefault();
+                codeAddress(geocoder,map);
+            });    
+            
+            
+        }
+
+        //setMarkers
+        /**
+         * Display markers of institutions on the map and add the inforWindow for all markers
+         */
+        function setMarkers() {
+            education.forEach((val, idx, array) => {
+                    let latLng = { lat: val.LATITUDE, lng: val.LONGITUDE };
+                    markersArray[idx] = new google.maps.Marker({
+                        position: latLng,
+                        map,
+                        title: val.NAME
+                    })
+                    
+                    infowindowsArray[idx]= new google.maps.InfoWindow({
+                        content: '<a href="' +val.WEBSITE+'"> <h5>' + val.NAME + '</h5></a>'
+                                    + val.ADDRESS + "<br>"
+                                    + val.CATEGORY + "<br>"
+                                    + val.COMMUNITY + "<br>"
+                                    + "<a href = '#' onclick = 'Direction(\"" + val.LATITUDE + "," +  val.LONGITUDE + "\")'>Direction</a>"
+                    }); 
+
+                    google.maps.event.addListener(markersArray[idx], 'click', function(){
+                        displayInfowindow();
+                        infowindowsArray[idx].open(map,markersArray[idx])
+                    });
+            });
+        }
+        /**
+         * Detect user's location by using Geolocation API, and display the marker for the location
+         */
+        function detectUserLocation(){
+            //Display a marker to point out user's location. If it has the error, it will display the message.
+            //https://developers.google.com/maps/documentation/javascript/geolocation
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                    const pos = {
+                        lat: position.coords.latitude,
+                        lng: position.coords.longitude,
+                    };
+                        myMarker = new google.maps.Marker({
+                        position: pos,
+                        map,
+                        label: labels[labelIndex++ % labels.length],
+                        title: "Your location",
+                    });
+                    myInfoWindow = new google.maps.InfoWindow({
+                        content: "<h5>Your location</h5>Latitude:" + pos['lat'] + "<br>Longtitude:" + pos['lng']
+                    });
+                    myInfoWindow.open(map,myMarker);
+                    google.maps.event.addListener(myMarker, 'click', function () {
+                        displayInfowindow();
+                        myInfoWindow.open(map,myMarker);
+                    });
+                    
+                    },
+                    () => {
+                        //User does not allow to access user's location
+                        $("#message").html("ERROR: You have not enable your location");
+                        $("#message").css('color', 'red');
+                    });
+            }
+            else {
+            // Browser doesn't support Geolocation
+            $("#message").html("ERROR: Your browser does not support Geolocation");
+            $("#message").css('color', 'red');
+            }
+        }
+
+        /**
+         * This function will close the appeared infowindow on the map in order to
+         *  display another infowindow when user click on the marker.
+         */
+        function displayInfowindow(){
+            if(myInfoWindow){
+                myInfoWindow.close();
+            }
+            for(let i = 0; i < infowindowsArray.length; i++){
+                if(infowindowsArray[i]){
+                    infowindowsArray[i].close();
+                }
+            }
+            for (let i = 0; i< newInfowindowArray.length; i++){
+                if(newInfowindowArray[i]){
+                    newInfowindowArray[i].close();
+                }
+            }
+        }
+        /**
+         * This function will set markers on the map by Category based on education.js
+         * @param {*} item
+         */
+        function setMarkersByCategory(item){
+            //Close the appeared infowindow.
+            displayInfowindow();
+            //Set marker by category based on education.js
+            for(let i = 0; i < education.length; i++){
+                if(education[i].CATEGORY === item){
+                    markersArray[i].setMap(map);
+                    for(let u = 0; u< newMarkerArray.length; u++){
+                        newMarkerArray[u].setMap(null);
+                    }
+                }
+                else if(item === "All"){
+                    markersArray[i].setMap(map);
+                    for(let u = 0; u< newMarkerArray.length; u++){
+                        newMarkerArray[u].setMap(map);
+                    }
+
+                }
+                else{
+                    markersArray[i].setMap(null);
+                }
+            }
+
+            
+        }
+
+        /**
+         * When user enter the address and the name and submit it, the function will create a marker on the map.
+         * If not, it will display a message to let user know.
+         */
+        function codeAddress() {
+            clearDirection();
+            var address = document.getElementById('address').value;
+            var name = document.getElementById('name').value;
+            geocoder.geocode( { 'address': address}, function(results, status) {
+            //https://developers.google.com/maps/documentation/javascript/geocoding#GeocodingAddressTypes
+                if(address != null){
+                    if (status == 'OK') {
+                        map.setCenter(results[0].geometry.location);
+                        newMarkerArray[count] = new google.maps.Marker({
+                            map,
+                            label: labels[labelIndex++ % labels.length],
+                            title: name,
+                            position: results[0].geometry.location
+                        });
+                        newInfowindowArray[count] = new google.maps.InfoWindow({
+                            content: '<h5>' + name + '</h5>'
+                                    + address + '<br>' + 
+                                    "<a href = '#' onclick = 'Direction(\"" + address + "\")'>Direction</a>"
+                        });
+                        displayInfowindow();
+                        newInfowindowArray[count].open(map, newMarkerArray[count]);
+                        for (let i = 0; i<newMarkerArray.length; i++){
+                            newMarkerArray[i].addListener('click',() =>{
+                                displayInfowindow();
+                                newInfowindowArray[i].open(map, newMarkerArray[i]);
+                            })
+                        }
+                        count++;
+                    } else {
+                        $message.html('Geocode was not successful for the following reason: ' + status);
+                    }
+                }
+            });
+
+        }
+        
+        //https://developers.google.com/maps/documentation/javascript/directions
+        /**
+         * This function will display directin on map and display steps in the direction frame
+         * @param {array} end
+         */
+        function Direction(end) {
+            clearDirection();
+            var start = myMarker['position'];
+            var request = {
+                origin:start,
+                destination:end,
+                travelMode: 'DRIVING'
+            };
+            directionsService.route(request, function(response, status) {
+                if (status == 'OK') {
+                    directionsRenderer.setMap(map);
+                    directionsRenderer.setDirections(response);
+                    directionsRenderer.setPanel(document.getElementById('map-directions')); 
+                }
+            });
+        }
+
+        /**
+         * This function will clear the direction in the frame and on the map too.
+         */
+        function clearDirection(){
+            $('#map-directions').html(" ");
+            directionsRenderer.setMap(null);
+            directionsRenderer.setPanel(null);
+        }
+    </script>
+
+    <style>
+        #message{
+            text-align: center;
+            margin-bottom: 30px;
+            
+        }
+        #map {
+            width: 100%;
+            height: 100%;
+        }
+
+        .row.top {
+            min-height: 600px;
+            
+        }
+
+        ul {
+            padding: 0;
+            margin: 0;
+            list-style: none;
+        }
+
+        ul li {
+            padding-bottom: 10px;
+        }
+
+        label {
+            cursor: pointer;
+        }
+
+        html,body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            font-family: sans-serif;
+        }
+        h3{
+            text-align: center;
+        }
+        #map-directions{
+            width: 300px;
+            height: 550px;
+            overflow-y: scroll;
+        }
+        #mapPlace{
+            margin-bottom: 40px;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1 class="text-center my-4">Thi Hoai An Le - Maps and Geolocation</h1>
+    </header>
+    <div class="container">
+        <!-- Top Row -->
+        <div class="row top">
+            <div class="col-3">
+                <h3>Category</h3>
+                <form id="map-filters">
+                    <ul>
+                        <li><label for="All"><input onclick="setMarkersByCategory('All')" type="radio" value="All" id="All" name="map_filter" checked> All</label></li>
+                        <li><label for="Elementary"><input onclick="setMarkersByCategory('Elementary School')" type="radio" value="Elementary" id="Elementary" name="map_filter"> Elementary</label></li>
+                        <li><label for="Middle"><input onclick="setMarkersByCategory('Middle School')" type="radio" value="Middle" id="Middle" name="map_filter"> Middle</label></li>
+                        <li><label for="Secondary"><input onclick="setMarkersByCategory('Secondary School')" type="radio" value="Secondary" id="Secondary" name="map_filter"> Secondary</label></li>
+                        <li><label for="Post"><input onclick="setMarkersByCategory('Post Secondary')" type="radio" value="Post" id="Post" name="map_filter"> Post-Secondary</label></li>
+                        <li><label for="Alternative"><input onclick="setMarkersByCategory('Alternative Education')" type="radio" value="Alternative" id="Alternative" name="map_filter"> Alternative</label></li>
+                        <li><label for="Adult"><input onclick="setMarkersByCategory('Adult Learning')" type="radio" value="Adult" id="Adult" name="map_filter"> Adult</label></li>
+                        <li><label for="Section"><input onclick="setMarkersByCategory('Section 23 Program')" type="radio" value="Section" id="Section" name="map_filter"> Section 23</label></li>
+                    </ul>
+                </form>  
+            </div>
+
+            <div class="col" id = "mapPlace">
+                <h3>Map</h3>
+                <div id="map"></div>
+                <h4 id = "message"></h4>
+            </div>
+
+            <div class="col-3">
+                <h3>Direction</h3>
+                <button onclick="clearDirection()" class = "btn-inline">Clear Direction</button>
+                <div id="map-directions"></div>
+                
+            </div>
+        </div>
+        
+        <!-- Bottom Row -->
+        <div class="row border mt-5 rounded">
+            <form id = 'addressForm'>
+                <div class="col p-2">
+                    <input type="text" id="name" name="name" class="form-control" placeholder="Downtown">
+                </div>
+                <div class="col p-2">
+                    <input type="text" id="address" name="address" class="form-control" placeholder="123 Main Street East, Hamilton, Ontario">
+                </div>
+                <div class="col-2 p-2 d-grid gap-2 md-block">
+                    <button type="submit" class="btn btn-primary btn-inline">Submit</button>
+                </div>
+            </form>
+        </div>
+    </div>
+  </body>
+</html>
